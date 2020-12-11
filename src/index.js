@@ -24,6 +24,19 @@ app.get('/totalRecovered', (req, res) => {
     return;
 });
 
+app.get('/totalActive', (req, res) => {
+    let activeCount = 0;
+    data.map(item => {
+        activeCount += (item.infected - item.recovered);
+    });
+    res.send({
+        data: {
+            _id: "total",
+            active: activeCount
+        }
+    });
+    return;
+});
 
 app.get('/totalDeath', (req, res) => {
     let deathCount = 0;
