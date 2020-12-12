@@ -1,152 +1,99 @@
-const express = require("express");
+const express = require('express');
 const app = express();
 const bodyParser = require("body-parser");
-const mongoose = require("mongoose");
 const port = 8080;
-
+const roundTo = require('round-to');
 // Parse JSON bodies (as sent by API clients)
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
-const { connection } = require("./connector");
+const { connection } = require('./connector')
+const {data} = require('./data');
 
-//handleRequests
 
-app.get("/totalRecovered", (req, res) => {
-  connection
-    .aggregate([
-      {
-        $group: {
-          _id: null,
-          totalRecovered: { $sum: "$recovered" }
-        }
-      }
-    ])
-    .then((result, error) => {
-      let response = {
+app.get('/totalRecovered', (req, res) => {
+    let recoveredCount = 0;
+    data.map(item => {
+        recoveredCount += item.recovered;
+    });
+    res.send({
         data: {
-          _id: "total",
-          recovered: result[0]["totalRecovered"]
+            _id: "total",
+            recovered: recoveredCount
         }
-      };
-      res.json(response);
     });
+    return;
 });
 
-app.get("/totalActive", (req, res) => {
-  connection
-    .aggregate([
-      {
-        $group: {
-          _id: null,
-          totalactive: {
-            $sum: {
-              $subtract: ["$infected", "$recovered"]
-            }
-          }
-        }
-      }
-    ])
-    .then((result, error) => {
-      let response = {
+app.get('/totalActive', (req, res) => {
+    let activeCount = 0;
+    data.map(item => {
+        activeCount += (item.infected - item.recovered);
+    });
+    res.send({
         data: {
-          _id: "total",
-          active: result[0]["totalactive"]
+            _id: "total",
+            active: activeCount
         }
-      };
-      res.json(response);
     });
+    return;
 });
 
-app.get("/totalDeath", (req, res) => {
-  connection
-    .aggregate([
-      {
-        $group: {
-          _id: null,
-          totaldeath: { $sum: "$death" }
-        }
-      }
-    ])
-    .then((result, error) => {
-      let response = {
+app.get('/totalDeath', (req, res) => {
+    let deathCount = 0;
+    data.map(item => {
+        deathCount += item.death;
+    });
+    res.send({
         data: {
-          _id: "total",
-          death: result[0]["totaldeath"]
+            _id: "total",
+            death: deathCount
         }
-      };
-      res.json(response);
     });
+    return;
 });
 
-app.get("/hotspotStates", (req, res) => {
-  connection
-    .aggregate([
-      {
-        $project: {
-          state: 1,
-          rate: {
-            $round: [
-              {
-                $divide: [
-                  {
-                    $subtract: ["$infected", "$recovered"]
-                  },
-                  "$infected"
-                ]
-              },
-              5
-            ]
-          }
+app.get('/hotspotStates', (req, res) => {
+    let hotspotStates = [];
+    data.map(item => {
+        let infected = item.infected;
+        let recovered = item.recovered;
+
+        if((infected - recovered) / infected > 0.1) {
+            let obj = {};
+            obj.state = item.state;
+            obj.rate = roundTo((infected - recovered) / infected, 5);
+            hotspotStates.push(obj);
         }
-      },
-      {
-        $match: { rate: { $gt: 0.1 } }
-      }
-    ])
-    .then((result, error) => {
-      let response = result.map((value) => {
-        return {
-          state: value["state"],
-          rate: value["rate"]
-        };
-      });
-      res.json({ data: response });
     });
+    res.send({
+        data: hotspotStates.map(item => {
+            return item
+        })
+    });
+    return;
 });
 
-app.get("/healthyStates", (req, res) => {
-  connection
-    .aggregate([
-      {
-        $project: {
-          state: 1,
-          mortalityrate: {
-            $round: [
-              {
-                $divide: ["$death", "$infected"]
-              },
-              5
-            ]
-          }
+app.get('/healthyStates', (req, res) => {
+    let healthyStates = [];
+    data.map(item => {
+        let infected = item.infected;
+        let death = item.death;
+
+        if(death / infected < 0.005) {
+            let obj = {};
+            obj.state = item.state;
+            obj.mortality = roundTo(death / infected, 5);
+            healthyStates.push(obj);
         }
-      },
-      {
-        $match: {
-          mortalityrate: { $lt: 0.005 }
-        }
-      }
-    ])
-    .then((result, error) => {
-      let response = result.map((value) => {
-        return {
-          state: value["state"],
-          mortality: value["mortalityrate"]
-        };
-      });
-      res.json({ data: response });
     });
+    res.send({
+        data: healthyStates.map(item => {
+            return item
+        })
+    });
+    return;
 });
 
-app.listen(port, () => console.log(`App listening on port ${port}!`));
+app.listen(port, () => console.log(`App listening on port ${port}!`))
 
 module.exports = app;
